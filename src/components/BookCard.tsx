@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  BookmarkPlus,
   Edit,
   Loader2,
   Plus,
@@ -13,6 +14,7 @@ import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import {
   addCopyAction,
+  createReservationAction,
   deleteBookAction,
   deleteCopyAction,
   toggleCopyMaintenanceAction,
@@ -47,6 +49,8 @@ interface BookCardProps {
 export function BookCard({ book }: BookCardProps) {
   const [isPending, startTransition] = useTransition();
   const [showAddCopy, setShowAddCopy] = useState(false);
+  const [showReserve, setShowReserve] = useState(false);
+  const [reserveUserId, setReserveUserId] = useState('2024002'); // Burak Kaya (Öğrenci)
   const [newBarcode, setNewBarcode] = useState(`BC-${Date.now().toString().slice(-4)}`);
   const [newShelf, setNewShelf] = useState('CS-01');
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
@@ -135,6 +139,17 @@ export function BookCard({ book }: BookCardProps) {
     });
   };
 
+  const handleReserve = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reserveUserId.trim()) return;
+
+    startTransition(async () => {
+      const res = await createReservationAction(book.id, reserveUserId.trim());
+      setShowReserve(false);
+      setMessage({ text: res.message, error: !res.success });
+    });
+  };
+
   return (
     <div className="glass-panel p-6 rounded-2xl border border-slate-800 hover:border-slate-700 transition-all space-y-4">
       {/* Üst Bilgi & Eylem Butonları */}
@@ -162,7 +177,7 @@ export function BookCard({ book }: BookCardProps) {
           )}
         </div>
 
-        {/* Aksiyonlar: Düzenle & Sil */}
+        {/* Aksiyonlar: Rezerve Et, Düzenle & Sil */}
         <div className="flex items-center gap-2 shrink-0">
           <div className="text-right mr-3 hidden sm:block">
             <span className="text-xs text-slate-400 block">Kopya Durumu</span>
@@ -170,6 +185,15 @@ export function BookCard({ book }: BookCardProps) {
               {book.availableCopyCount} Rafta / {book.totalCopyCount} Toplam
             </span>
           </div>
+
+          <button
+            onClick={() => setShowReserve(!showReserve)}
+            className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 flex items-center gap-1.5 transition-all"
+            title="Sıraya Gir / Rezerve Et (Observer Pattern)"
+          >
+            <BookmarkPlus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Rezerve Et</span>
+          </button>
 
           <Link
             href={`/catalog/${book.id}/edit`}
@@ -189,6 +213,42 @@ export function BookCard({ book }: BookCardProps) {
           </button>
         </div>
       </div>
+
+      {/* Rezervasyon Açılır Formu */}
+      {showReserve && (
+        <form
+          onSubmit={handleReserve}
+          className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-wrap items-center gap-3 text-xs"
+        >
+          <div className="text-amber-300 font-semibold flex items-center gap-1.5">
+            <BookmarkPlus className="w-4 h-4" />
+            <span>Rezervasyon Kuyruğu:</span>
+          </div>
+          <div className="flex-1 min-w-[180px]">
+            <input
+              type="text"
+              placeholder="Üye No / Sicil (Örn: 2024002)"
+              value={reserveUserId}
+              onChange={(e) => setReserveUserId(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isPending}
+            className="px-3.5 py-1.5 rounded-lg font-semibold bg-amber-600 hover:bg-amber-500 text-white shadow-sm"
+          >
+            Sıraya Al
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowReserve(false)}
+            className="px-2 py-1.5 rounded-lg text-slate-400 hover:text-slate-200"
+          >
+            Vazgeç
+          </button>
+        </form>
+      )}
 
       {message && (
         <div

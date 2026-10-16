@@ -1,6 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { AuditLog } from '../core/entities/AuditLog';
+import { Reservation } from '../core/entities/Reservation';
 import { UserRole, UserType } from '../core/types/enums';
 import { SupabaseUnitOfWork } from '../infrastructure/repositories/SupabaseUnitOfWork';
 import { CatalogService, ICreateBookInput } from '../services/CatalogService';
@@ -320,4 +322,65 @@ export async function getCirculationDataAction() {
   }
 
   return detailedLoans;
+}
+
+/**
+ * Kitap Rezervasyon Kuyruğuna Alma Action (Observer Pattern Entegrasyonu)
+ */
+export async function createReservationAction(bookId: string, userIdentifier: string) {
+  try {
+    let user = await uow.users.findById(userIdentifier);
+    if (!user) {
+      user = await uow.users.findByStudentOrStaffId(userIdentifier);
+    }
+    if (!user) {
+      return { success: false, message: 'Üye bulunamadı.' };
+    }
+
+    const book = await uow.books.findById(bookId);
+    if (!book) {
+      return { success: false, message: 'Kitap bulunamadı.' };
+    }
+
+    const activeReservations = await uow.reservations.findActiveByBookId(bookId);
+    const alreadyInQueue = activeReservations.some((r) => r.userId === user.id);
+    if (alreadyInQueue) {
+      return { success: false, message: 'Bu üye zaten bu kitap için rezervasyon kuyruğunda bekliyor.' };
+    }
+
+    const queueNumber = activeReservations.length + 1;
+    const reservation = new Reservation({
+      id: crypto.randomUUID(),
+      userId: user.id,
+      bookId: book.id,
+      queueNumber,
+      isActive: true,
+    });
+
+    await uow.reservations.save(reservation);
+
+    await uow.auditLogs.save(
+      new AuditLog({
+        userId: user.id,
+        action: 'RESERVATION_CREATED',
+        entityName: 'Reservation',
+        entityId: reservation.id,
+        details: {
+          bookTitle: book.title,
+          queueNumber,
+          userName: user.fullName,
+        },
+      })
+    );
+
+    revalidatePath('/catalog');
+    revalidatePath('/');
+    return {
+      success: true,
+      message: `${user.fullName}, "${book.title}" için ${queueNumber}. sırada rezervasyon kuyruğuna alındı. Kitap iade edildiğinde otomatik olarak ayrılacaktır.`,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Rezervasyon oluşturulamadı.';
+    return { success: false, message };
+  }
 }

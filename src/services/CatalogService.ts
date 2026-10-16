@@ -121,6 +121,13 @@ export class CatalogService {
     await this.uow.books.updateCopyStatus(copy.id, CopyStatus.MAINTENANCE);
   }
 
+  public async restoreCopy(barcode: string): Promise<void> {
+    const copy = await this.uow.books.findCopyByBarcode(barcode);
+    if (!copy) throw new Error('Kopya bulunamadı.');
+    copy.restore();
+    await this.uow.books.updateCopyStatus(copy.id, CopyStatus.AVAILABLE);
+  }
+
   public async updateBook(id: string, input: Partial<ICreateBookInput>): Promise<Book> {
     const book = await this.uow.books.findById(id);
     if (!book) throw new Error('Kitap bulunamadı.');
